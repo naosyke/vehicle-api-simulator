@@ -117,7 +117,7 @@ flowchart LR
 |---|---|---|
 | FastAPI endpoints | `app/main.py` | REST API, validation (`422`), state errors (`409`) |
 | Background loops | `app/main.py` | Run the simulation and publish telemetry periodically |
-| VehicleSimulator | `app/simulator.py` | Vehicle state, physics, state rules, events |
+| VehicleSimulator | `app/simulator.py` | Vehicle state, physics, state rules, events, anomaly detection, trip statistics |
 | MqttPublisher | `app/mqtt_publisher.py` | Send telemetry, events and online/offline status to MQTT |
 | WebSocketHub | `app/websocket_hub.py` | Deliver events to each WebSocket client's queue from any thread |
 | Dashboard | `app/static/dashboard.html` | Browser UI: tiles, charts, trajectory, controls, event log |
@@ -256,8 +256,8 @@ sequenceDiagram
 
 | Tool type | Tools | MCP annotation |
 |---|---|---|
-| Read | `get_vehicle_status`, `get_recent_events`, `get_simulation_status` | `readOnlyHint` |
-| Control | `set_target_speed`, `set_steering`, `set_door`, `set_lights`, `set_charging`, `advance_simulation` | - |
+| Read | `get_vehicle_status`, `get_recent_events`, `get_driving_summary`, `get_simulation_status` | `readOnlyHint` |
+| Control | `set_target_speed`, `emergency_brake`, `set_steering`, `set_door`, `set_lights`, `set_charging`, `advance_simulation` | - |
 | Destructive | `reset_simulation` | `destructiveHint` |
 
 ## 5. MQTT Topics

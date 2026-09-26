@@ -85,3 +85,25 @@ class SimulationStatus(BaseModel):
     elapsed_seconds: float
     mqtt_enabled: bool
     mqtt_connected: bool
+
+
+class AnomalyCounts(BaseModel):
+    harsh_braking: int
+    sharp_turn: int
+    overspeed: int
+
+
+class DrivingSummary(BaseModel):
+    elapsed_seconds: float
+    driving_seconds: float = Field(description="Time spent moving")
+    distance_km: float
+    average_speed_kmh: float = Field(description="Average speed while moving")
+    max_speed_kmh: float
+    energy_used_kwh: float = Field(description="Energy used while moving")
+    energy_charged_kwh: float
+    efficiency_kwh_per_100km: Optional[float] = Field(description="Null until the vehicle has moved at least 10 m")
+    speed_limit_kmh: float
+    overspeed_seconds: float = Field(description="Time above the speed limit, after the grace period")
+    anomalies: AnomalyCounts
+    score: int = Field(description="Driving score from 0 to 100")
+    rating: str = Field(description="excellent (90+), good (75+), fair (50+) or poor")

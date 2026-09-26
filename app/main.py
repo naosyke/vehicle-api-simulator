@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from app.models import (
     BatteryRequest,
     ChargingRequest,
+    DrivingSummary,
     Door,
     DoorId,
     DoorRequest,
@@ -41,13 +42,16 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 VEHICLE_ID = os.getenv("VEHICLE_ID", "sim-001")
 TELEMETRY_INTERVAL_SECONDS = float(os.getenv("TELEMETRY_INTERVAL_SECONDS", "1.0"))
 
+# Speed above which driving is reported as an overspeed anomaly.
+SPEED_LIMIT_KMH = float(os.getenv("SPEED_LIMIT_KMH", "100"))
+
 # Interval of state updates pushed to dashboard WebSocket clients.
 WS_INTERVAL_SECONDS = float(os.getenv("WS_INTERVAL_SECONDS", "0.2"))
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-simulator = VehicleSimulator()
+simulator = VehicleSimulator(speed_limit_kmh=SPEED_LIMIT_KMH)
 simulation_running = False
 mqtt_publisher = None
 
@@ -213,6 +217,17 @@ def set_target_speed(request: SpeedRequest):
     }
 
 
+@app.post("/vehicle/emergency-brake")
+def emergency_brake():
+    """Brake as hard as possible (8 m/s²) until the vehicle stops."""
+    simulator.emergency_brake()
+    vehicle = simulator.snapshot()
+    return {
+        "speed": vehicle.speed,
+        "target_speed": vehicle.target_speed,
+    }
+
+
 @app.get("/vehicle/steering")
 def get_steering():
     return {
@@ -290,6 +305,12 @@ def set_charging(request: ChargingRequest):
     except VehicleStateError as error:
         raise conflict(error)
     return get_battery()
+
+
+@app.get("/analysis/summary", response_model=DrivingSummary)
+def get_driving_summary():
+    """Trip statistics, anomaly counts and a driving score since the last reset."""
+    return simulator.driving_summary()
 
 
 @app.get("/events")

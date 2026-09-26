@@ -208,3 +208,29 @@ def test_events_limit():
 
     assert len(client.get("/events", params={"limit": 2}).json()) == 2
     assert client.get("/events", params={"limit": 0}).status_code == 422
+
+
+def test_emergency_brake_endpoint():
+    client.post("/vehicle/speed", json={"speed": 80})
+
+    response = client.post("/vehicle/emergency-brake")
+
+    assert response.status_code == 200
+    assert response.json()["target_speed"] == 0
+
+    client.post("/simulation/step", json={"seconds": 5})
+    events = [e["type"] for e in client.get("/events").json()]
+
+    assert "harsh_braking" in events
+    assert "emergency_brake" in events
+
+
+def test_driving_summary_endpoint():
+    client.post("/vehicle/speed", json={"speed": 36})
+    client.post("/simulation/step", json={"seconds": 100})
+
+    summary = client.get("/analysis/summary").json()
+
+    assert summary["distance_km"] == 1.0
+    assert summary["score"] == 100
+    assert summary["anomalies"] == {"harsh_braking": 0, "sharp_turn": 0, "overspeed": 0}
