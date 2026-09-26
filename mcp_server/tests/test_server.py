@@ -25,6 +25,8 @@ async def test_lists_tools_with_annotations():
     assert set(tools) == {
         "get_vehicle_status",
         "get_recent_events",
+        "get_driving_summary",
+        "emergency_brake",
         "set_target_speed",
         "set_steering",
         "set_door",
@@ -121,3 +123,16 @@ async def test_reset():
         result = await call(client, "reset_simulation")
 
     assert result.structured_content["speed"] == 0
+
+
+async def test_emergency_brake_shows_up_in_summary():
+    simulator.set_speed(80)
+
+    async with Client(in_process_server()) as client:
+        braked = await call(client, "emergency_brake")
+        await call(client, "advance_simulation", {"seconds": 5})
+        summary = await call(client, "get_driving_summary")
+
+    assert braked.structured_content["target_speed"] == 0
+    assert summary.structured_content["anomalies"]["harsh_braking"] == 1
+    assert summary.structured_content["score"] == 95

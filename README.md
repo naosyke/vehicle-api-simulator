@@ -194,6 +194,8 @@ Events:
 | `lights_changed` | `headlights`, `hazard` |
 | `charging_started` / `charging_stopped` | `battery` |
 | `battery_low` (below 20 %) / `battery_empty` | `battery` |
+| `emergency_brake` | `speed` |
+| `harsh_braking` / `sharp_turn` / `overspeed` (anomalies) | `speed`, `x`, `y` and the measured value |
 | `simulation_reset` | - |
 
 Example event:
@@ -249,6 +251,7 @@ commands that are not allowed in the current vehicle state return `409`.
 | GET | `/vehicle/speed` | Current and target speed (km/h) |
 | POST | `/vehicle/speed` | Set the speed immediately `{"speed": 30}` |
 | POST | `/vehicle/target-speed` | Accelerate / decelerate toward a speed `{"speed": 60}` |
+| POST | `/vehicle/emergency-brake` | Brake at 8 m/s² until stopped (recorded as harsh braking) |
 | GET / POST | `/vehicle/steering` | Road wheel angle in degrees, -35 to 35, left positive `{"angle": 10}` |
 | GET / POST | `/vehicle/position` | Position in meters `{"x": 0, "y": 0}` |
 | GET | `/vehicle/doors` | All doors |
@@ -257,6 +260,7 @@ commands that are not allowed in the current vehicle state return `409`.
 | GET / POST | `/vehicle/battery` | State of charge in percent `{"level": 80}` |
 | POST | `/vehicle/charging` | Start / stop charging `{"charging": true}` |
 | GET | `/events?limit=20` | Recent events, newest first (up to 200 are kept) |
+| GET | `/analysis/summary` | Trip statistics, anomaly counts and driving score |
 
 Example response of `GET /vehicle`:
 
@@ -288,6 +292,39 @@ Example response of `GET /vehicle`:
 * Charging is not allowed while moving and stops automatically at 100 %.
 * When the battery reaches 0 %, the vehicle decelerates to a stop.
 
+### Anomaly Detection and Driving Analysis
+
+The simulator watches the vehicle on every step and reports dangerous driving
+as events (REST `/events`, WebSocket, MQTT):
+
+| Anomaly | Condition |
+|---|---|
+| `harsh_braking` | Deceleration of 4.5 m/s² or more (e.g. emergency brake) |
+| `sharp_turn` | Lateral acceleration of 4.0 m/s² or more |
+| `overspeed` | Above `SPEED_LIMIT_KMH` for more than 3 seconds |
+
+Each anomaly is reported once when it starts, not on every step.
+
+`GET /analysis/summary` returns the trip since the last reset:
+
+```json
+{
+  "distance_km": 0.647,
+  "driving_seconds": 27.0,
+  "average_speed_kmh": 86.1,
+  "max_speed_kmh": 120.0,
+  "efficiency_kwh_per_100km": 15.6,
+  "overspeed_seconds": 11.0,
+  "anomalies": {"harsh_braking": 1, "sharp_turn": 1, "overspeed": 1},
+  "score": 90,
+  "rating": "excellent"
+}
+```
+
+Driving score = 100 − 5 per harsh braking − 3 per sharp turn − 0.2 per
+second over the speed limit (after the 3 second grace period), floored at 0.
+Rating: excellent (90+), good (75+), fair (50+), poor.
+
 ### Simulation
 
 | Method | Path | Description |
@@ -301,7 +338,7 @@ The vehicle moves with a kinematic bicycle model:
 | Parameter | Value |
 |---|---|
 | Wheelbase | 2.7 m |
-| Acceleration / deceleration | 3.0 / 6.0 m/s² |
+| Acceleration / deceleration | 3.0 / 3.0 m/s² (emergency brake: 8.0 m/s²) |
 | Max speed | 180 km/h |
 | Battery | 60 kWh, 0.15 kWh/km, 0.5 kW idle |
 | Charging power | 50 kW |
@@ -319,6 +356,7 @@ Coordinates: `x` = east, `y` = north, heading 0° = east, counter-clockwise posi
 | `VEHICLE_ID` | `sim-001` | Vehicle ID used in MQTT topics |
 | `TELEMETRY_INTERVAL_SECONDS` | `1.0` | Telemetry publish interval in seconds |
 | `WS_INTERVAL_SECONDS` | `0.2` | Dashboard WebSocket state interval in seconds |
+| `SPEED_LIMIT_KMH` | `100` | Speed limit used for overspeed detection |
 
 ## Run Tests
 
@@ -418,8 +456,8 @@ vehicle-api-simulator/
 
 ### Phase 7 - AI
 
-* [ ] Driving data analysis
-* [ ] Abnormal behavior detection
+* [x] Driving data analysis
+* [x] Abnormal behavior detection
 * [ ] AI vehicle assistant
 * [x] AI agent integration (MCP server)
 

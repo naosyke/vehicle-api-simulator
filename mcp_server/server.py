@@ -25,6 +25,8 @@ Speeds are km/h, steering is the road wheel angle in degrees (left positive,
 -35 to 35), battery is percent, positions are meters (x = east, y = north).
 The vehicle enforces rules, e.g. locked doors cannot be opened, doors cannot
 be opened while moving, and it cannot drive with a door open or while charging.
+The simulator detects anomalies (harsh_braking, sharp_turn, overspeed) and
+scores the driving; use get_driving_summary to analyze a trip.
 When a command is rejected, explain the reason to the user and suggest the
 steps that would make it possible instead of retrying the same command.
 """
@@ -78,7 +80,8 @@ def create_server(api_url=None, transport=None):
     @server.tool(annotations=READ_ONLY)
     async def get_recent_events(limit: int = 20) -> list[dict[str, Any]]:
         """Get recent vehicle events, newest first (e.g. door_opened,
-        vehicle_started, vehicle_stopped, battery_low, charging_started).
+        vehicle_started, vehicle_stopped, battery_low, charging_started,
+        and anomalies: harsh_braking, sharp_turn, overspeed).
 
         Args:
             limit: Number of events to return, 1 to 200.
@@ -93,6 +96,22 @@ def create_server(api_url=None, transport=None):
             speed_kmh: Target speed in km/h, 0 to 180. 0 brings the vehicle to a stop.
         """
         return await request("POST", "/vehicle/target-speed", json={"speed": speed_kmh})
+
+    @server.tool(annotations=CONTROL)
+    async def emergency_brake() -> dict[str, Any]:
+        """Brake as hard as possible (8 m/s²) until the vehicle stops.
+        This is recorded as a harsh_braking anomaly; use set_target_speed(0)
+        for a normal stop."""
+        return await request("POST", "/vehicle/emergency-brake")
+
+    @server.tool(annotations=READ_ONLY)
+    async def get_driving_summary() -> dict[str, Any]:
+        """Analyze the trip since the last reset: distance, driving time,
+        average and max speed, energy efficiency (kWh/100 km), anomaly counts
+        (harsh_braking, sharp_turn, overspeed), time over the speed limit, and
+        a driving score (0-100) with a rating. Score = 100 - 5 per harsh
+        braking - 3 per sharp turn - 0.2 per second over the speed limit."""
+        return await request("GET", "/analysis/summary")
 
     @server.tool(annotations=CONTROL)
     async def set_steering(angle_deg: float) -> dict[str, Any]:

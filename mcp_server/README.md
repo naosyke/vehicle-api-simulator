@@ -4,7 +4,8 @@ An [MCP](https://modelcontextprotocol.io/) server that lets AI assistants such a
 Claude Desktop and Claude Code read and control the vehicle simulator in plain language:
 
 > "What's the battery level?" / "Unlock and open the front left door." /
-> "Drive at 40 km/h for a minute and tell me where the car ends up."
+> "Drive at 40 km/h for a minute and tell me where the car ends up." /
+> "How was my driving? Any dangerous moments?"
 
 The server wraps the simulator's REST API as tools and communicates with the
 MCP client over stdio. The vehicle rules still apply: when a command is
@@ -17,8 +18,10 @@ reason and can explain it.
 |---|---|---|
 | `get_vehicle_status` | read | Speed, battery, position, heading, doors, lights, ... |
 | `get_recent_events` | read | Recent events, newest first |
+| `get_driving_summary` | read | Trip statistics, anomaly counts and driving score |
 | `get_simulation_status` | read | Simulation loop, elapsed time, MQTT status |
 | `set_target_speed` | control | Accelerate / decelerate toward a speed (0 stops) |
+| `emergency_brake` | control | Brake as hard as possible (recorded as harsh braking) |
 | `set_steering` | control | Road wheel angle, -35 to 35 degrees |
 | `set_door` | control | Open / close / lock / unlock a door |
 | `set_lights` | control | Headlights and hazard lights |

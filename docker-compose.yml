@@ -10,6 +10,7 @@ services:
       MQTT_PORT: "1883"
       VEHICLE_ID: "sim-001"
       TELEMETRY_INTERVAL_SECONDS: "1.0"
+      SPEED_LIMIT_KMH: "100"
     depends_on:
       - mosquitto
     # Mount the source and reload on changes for local development.
