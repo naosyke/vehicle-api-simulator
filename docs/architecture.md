@@ -14,6 +14,8 @@ flowchart LR
     browser["Web browser / API client<br/>curl, /docs"]
     dashboard["Dashboard<br/>/dashboard"]
     subscriber["Subscriber<br/>tools/subscriber.py"]
+    ai["AI assistant<br/>Claude Desktop / Claude Code"]
+    mcp["MCP server<br/>mcp_server/server.py"]
 
     subgraph compose["Docker Compose network: vehicle-api-simulator_default"]
         direction LR
@@ -23,6 +25,8 @@ flowchart LR
 
     browser -- "HTTP REST<br/>localhost:8000" --> api
     dashboard -- "REST commands + WebSocket /ws<br/>localhost:8000" --> api
+    ai -- "MCP over stdio<br/>(launched by the client)" --> mcp
+    mcp -- "HTTP REST<br/>VEHICLE_API_URL" --> api
     api -- "MQTT publish<br/>mosquitto:1883" --> broker
     broker -- "MQTT subscribe<br/>localhost:1883" --> subscriber
 ```
@@ -222,6 +226,39 @@ sequenceDiagram
     H-->>A: event via the client's queue
     A-->>D: {"kind": "event", "type": "lights_changed", ...}
 ```
+
+### AI assistant (MCP)
+
+The MCP server runs on the host, launched by the AI client as a subprocess
+and connected over stdio. It is a thin adapter: every tool maps to one REST
+call, so the vehicle rules are enforced by the simulator, not by the AI.
+
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant C as Claude (Desktop / Code)
+    participant M as MCP server
+    participant A as vehicle-api
+
+    U->>C: "Open the front left door"
+    C->>M: call_tool set_door {door: front_left, open: true}
+    M->>A: POST /vehicle/doors/front_left {"open": true}
+    A-->>M: 409 Door front_left is locked
+    M-->>C: is_error: "Rejected by the vehicle: Door front_left is locked"
+    C->>U: "The door is locked. Shall I unlock it and open it?"
+    U->>C: "Yes"
+    C->>M: call_tool set_door {door: front_left, open: true, locked: false}
+    M->>A: POST /vehicle/doors/front_left
+    A-->>M: 200 {"open": true, "locked": false}
+    M-->>C: result
+    C->>U: "Unlocked and opened the front left door."
+```
+
+| Tool type | Tools | MCP annotation |
+|---|---|---|
+| Read | `get_vehicle_status`, `get_recent_events`, `get_simulation_status` | `readOnlyHint` |
+| Control | `set_target_speed`, `set_steering`, `set_door`, `set_lights`, `set_charging`, `advance_simulation` | - |
+| Destructive | `reset_simulation` | `destructiveHint` |
 
 ## 5. MQTT Topics
 

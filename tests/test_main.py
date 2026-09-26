@@ -189,3 +189,22 @@ def test_simulation_status_and_reset():
 
     assert data["speed"] == 0
     assert data["position"] == {"x": 0, "y": 0}
+
+
+def test_events_history_newest_first():
+    client.post("/vehicle/lights", json={"headlights": "low"})
+    client.post("/vehicle/doors/front_left", json={"locked": False})
+
+    events = client.get("/events").json()
+
+    assert [e["type"] for e in events] == ["door_unlocked", "lights_changed"]
+    assert events[0]["data"] == {"door": "front_left"}
+    assert "timestamp" in events[0]
+
+
+def test_events_limit():
+    for hazard in [True, False, True]:
+        client.post("/vehicle/lights", json={"hazard": hazard})
+
+    assert len(client.get("/events", params={"limit": 2}).json()) == 2
+    assert client.get("/events", params={"limit": 0}).status_code == 422
