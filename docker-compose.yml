@@ -6,8 +6,21 @@ services:
     environment:
       SIM_AUTO_UPDATE: "1"
       SIM_TICK_SECONDS: "0.1"
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      VEHICLE_ID: "sim-001"
+      TELEMETRY_INTERVAL_SECONDS: "1.0"
+    depends_on:
+      - mosquitto
     # Mount the source and reload on changes for local development.
     volumes:
       - ./app:/app/app
       - ./tests:/app/tests
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro

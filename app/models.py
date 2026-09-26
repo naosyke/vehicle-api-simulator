@@ -83,3 +83,5 @@ class SimulationStatus(BaseModel):
     running: bool
     tick_seconds: float
     elapsed_seconds: float
+    mqtt_enabled: bool
+    mqtt_connected: bool
