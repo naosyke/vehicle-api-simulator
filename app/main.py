@@ -20,19 +20,27 @@ from app.models import (
     StepRequest,
     Vehicle,
 )
+from app.mqtt_publisher import MqttPublisher
 from app.simulator import VehicleSimulator, VehicleStateError
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 # Set SIM_AUTO_UPDATE=0 to disable the background loop and drive the
 # simulation only through POST /simulation/step.
 AUTO_UPDATE = os.getenv("SIM_AUTO_UPDATE", "1") != "0"
 TICK_SECONDS = float(os.getenv("SIM_TICK_SECONDS", "0.1"))
 
+# MQTT publishing is enabled when MQTT_HOST is set.
+MQTT_HOST = os.getenv("MQTT_HOST")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+VEHICLE_ID = os.getenv("VEHICLE_ID", "sim-001")
+TELEMETRY_INTERVAL_SECONDS = float(os.getenv("TELEMETRY_INTERVAL_SECONDS", "1.0"))
+
 
 simulator = VehicleSimulator()
 simulation_running = False
+mqtt_publisher = None
 
 
 async def run_simulation_loop():
@@ -44,20 +52,37 @@ async def run_simulation_loop():
         last = now
 
 
+async def run_telemetry_loop(publisher):
+    while True:
+        publisher.publish_telemetry(simulator.snapshot())
+        await asyncio.sleep(TELEMETRY_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app):
-    global simulation_running
+    global simulation_running, mqtt_publisher
 
-    task = None
+    tasks = []
     if AUTO_UPDATE:
-        task = asyncio.create_task(run_simulation_loop())
+        tasks.append(asyncio.create_task(run_simulation_loop()))
         simulation_running = True
+
+    if MQTT_HOST:
+        mqtt_publisher = MqttPublisher(MQTT_HOST, MQTT_PORT, VEHICLE_ID)
+        mqtt_publisher.start()
+        simulator.add_listener(mqtt_publisher.publish_event)
+        tasks.append(asyncio.create_task(run_telemetry_loop(mqtt_publisher)))
 
     yield
 
-    if task is not None:
+    for task in tasks:
         task.cancel()
-        simulation_running = False
+    simulation_running = False
+
+    if mqtt_publisher is not None:
+        simulator.remove_listener(mqtt_publisher.publish_event)
+        mqtt_publisher.stop()
+        mqtt_publisher = None
 
 
 app = FastAPI(
@@ -205,6 +230,8 @@ def get_simulation():
         running=simulation_running,
         tick_seconds=TICK_SECONDS,
         elapsed_seconds=round(simulator.elapsed_seconds, 3),
+        mqtt_enabled=mqtt_publisher is not None,
+        mqtt_connected=mqtt_publisher is not None and mqtt_publisher.connected,
     )
 
 

@@ -17,27 +17,23 @@ The project is intended for learning and experimentation with:
 
 ## Architecture
 
-```text
-┌─────────────────────────┐
-│   Vehicle API Simulator │
-│                         │
-│  Speed                  │
-│  Battery                │
-│  Position               │
-│  Steering               │
-└────────────┬────────────┘
-             │
-             │ REST API
-             ▼
-┌─────────────────────────┐
-│        FastAPI          │
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│ API Client / Web Browser │
-└─────────────────────────┘
+```mermaid
+flowchart LR
+    browser["Web browser / API client"]
+    subscriber["Subscriber<br/>tools/subscriber.py"]
+
+    subgraph compose["Docker Compose"]
+        api["vehicle-api<br/>FastAPI + simulator"]
+        broker["mosquitto<br/>MQTT broker"]
+    end
+
+    browser -- "REST :8000" --> api
+    api -- "MQTT publish<br/>telemetry / events / status" --> broker
+    broker -- "MQTT subscribe :1883" --> subscriber
 ```
+
+See [docs/architecture.md](docs/architecture.md) for the Docker setup,
+components, sequence diagrams and MQTT topics.
 
 ## Requirements
 
@@ -105,7 +101,8 @@ Start the simulator:
 docker compose up --build
 ```
 
-The API is available at `http://127.0.0.1:8000` (docs at `/docs`).
+This starts two containers: `vehicle-api` and the `mosquitto` MQTT broker.
+The API is available at `http://127.0.0.1:8000` (docs at `/docs`) and the broker at `127.0.0.1:1883`.
 Source files under `app/` are mounted into the container and reloaded on change.
 
 Use another host port if 8000 is taken:
@@ -132,6 +129,55 @@ To build and run the production image without Compose:
 docker build -t vehicle-api-simulator .
 docker run --rm -p 8000:8000 vehicle-api-simulator
 ```
+
+## MQTT
+
+When `MQTT_HOST` is set (as in `docker-compose.yml`), the simulator publishes to an MQTT broker.
+
+| Topic | QoS | Payload |
+|---|---|---|
+| `vehicle/{vehicle_id}/telemetry` | 0 | Full vehicle state every `TELEMETRY_INTERVAL_SECONDS` |
+| `vehicle/{vehicle_id}/events` | 1 | State change events (see below) |
+| `vehicle/{vehicle_id}/status` | 1, retained | `online`, or `offline` (also sent as the last will) |
+
+Events:
+
+| Type | Data |
+|---|---|
+| `vehicle_started` / `vehicle_stopped` | position when stopped |
+| `door_opened` / `door_closed` / `door_locked` / `door_unlocked` | `door` |
+| `lights_changed` | `headlights`, `hazard` |
+| `charging_started` / `charging_stopped` | `battery` |
+| `battery_low` (below 20 %) / `battery_empty` | `battery` |
+| `simulation_reset` | - |
+
+Example event:
+
+```json
+{
+  "vehicle_id": "sim-001",
+  "timestamp": 1790000000.0,
+  "type": "door_opened",
+  "data": {"door": "front_left"}
+}
+```
+
+Watch the messages with the sample subscriber (after `docker compose up`):
+
+```bash
+python tools/subscriber.py
+```
+
+```text
+01:10:09 [sim-001] EVENT vehicle_started
+01:10:10 [sim-001] speed=  11.2 km/h  battery=100.00 %  pos=(     1.6,      0.0)  heading=  0.0
+01:10:14 [sim-001] EVENT vehicle_stopped x=21.517 y=0.0
+01:10:15 [sim-001] EVENT door_opened door=front_left
+```
+
+Use `--events-only` to hide telemetry, or `--vehicle sim-001` to filter by vehicle.
+
+The broker configuration in `mosquitto/mosquitto.conf` allows anonymous access and is for local development only.
 
 ## API Documentation
 
@@ -222,6 +268,10 @@ Coordinates: `x` = east, `y` = north, heading 0° = east, counter-clockwise posi
 |---|---|---|
 | `SIM_AUTO_UPDATE` | `1` | Set to `0` to disable the periodic update loop and use `/simulation/step` only |
 | `SIM_TICK_SECONDS` | `0.1` | Periodic update interval in seconds |
+| `MQTT_HOST` | (unset) | MQTT broker host. MQTT publishing is disabled when unset |
+| `MQTT_PORT` | `1883` | MQTT broker port |
+| `VEHICLE_ID` | `sim-001` | Vehicle ID used in MQTT topics |
+| `TELEMETRY_INTERVAL_SECONDS` | `1.0` | Telemetry publish interval in seconds |
 
 ## Run Tests
 
@@ -238,19 +288,29 @@ vehicle-api-simulator/
 │
 ├── app/
 │   ├── __init__.py
-│   ├── main.py        # REST API and periodic update loop
-│   ├── models.py      # Request / response models
-│   └── simulator.py   # Vehicle state and physics
+│   ├── main.py            # REST API and background loops
+│   ├── models.py          # Request / response models
+│   ├── mqtt_publisher.py  # MQTT telemetry and events
+│   └── simulator.py       # Vehicle state, physics and events
 │
 ├── tests/
 │   ├── conftest.py
 │   ├── test_main.py
+│   ├── test_mqtt_publisher.py
 │   └── test_simulator.py
+│
+├── tools/
+│   └── subscriber.py      # Sample MQTT subscriber
+│
+├── mosquitto/
+│   └── mosquitto.conf
 │
 ├── .dockerignore
 ├── .gitignore
 ├── Dockerfile
 ├── docker-compose.yml
+├── docs/
+│   └── architecture.md
 ├── README.md
 └── requirements.txt
 ```
@@ -288,10 +348,10 @@ vehicle-api-simulator/
 
 ### Phase 5 - MQTT
 
-* [ ] MQTT broker
-* [ ] Vehicle telemetry
-* [ ] Vehicle event publishing
-* [ ] Subscriber
+* [x] MQTT broker
+* [x] Vehicle telemetry
+* [x] Vehicle event publishing
+* [x] Subscriber
 
 ### Phase 6 - Dashboard
 
