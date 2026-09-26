@@ -44,6 +44,7 @@ The project is intended for learning and experimentation with:
 * Python 3.9+
 * pip
 * Git
+* Docker (optional)
 
 ## Setup
 
@@ -92,6 +93,44 @@ The server will start at:
 
 ```text
 http://127.0.0.1:8000
+```
+
+## Run with Docker
+
+Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine with Compose).
+
+Start the simulator:
+
+```bash
+docker compose up --build
+```
+
+The API is available at `http://127.0.0.1:8000` (docs at `/docs`).
+Source files under `app/` are mounted into the container and reloaded on change.
+
+Use another host port if 8000 is taken:
+
+```bash
+API_PORT=8001 docker compose up --build
+```
+
+Run the tests inside the container:
+
+```bash
+docker compose exec vehicle-api python -m pytest
+```
+
+Stop the simulator:
+
+```bash
+docker compose down
+```
+
+To build and run the production image without Compose:
+
+```bash
+docker build -t vehicle-api-simulator .
+docker run --rm -p 8000:8000 vehicle-api-simulator
 ```
 
 ## API Documentation
@@ -208,7 +247,10 @@ vehicle-api-simulator/
 │   ├── test_main.py
 │   └── test_simulator.py
 │
+├── .dockerignore
 ├── .gitignore
+├── Dockerfile
+├── docker-compose.yml
 ├── README.md
 └── requirements.txt
 ```
@@ -240,9 +282,9 @@ vehicle-api-simulator/
 
 ### Phase 4 - Docker
 
-* [ ] Dockerfile
-* [ ] Docker Compose
-* [ ] Containerized development environment
+* [x] Dockerfile
+* [x] Docker Compose
+* [x] Containerized development environment
 
 ### Phase 5 - MQTT
 
