@@ -21,6 +21,10 @@ class Vehicle(BaseModel):
     steering: float
 
 
+class SpeedRequest(BaseModel):
+    speed: float
+
+
 vehicle = Vehicle(
     speed=0.0,
     battery=100.0,
@@ -52,3 +56,12 @@ def get_speed():
 @app.get("/vehicle/position")
 def get_position():
     return vehicle.position
+
+
+@app.post("/vehicle/speed")
+def set_speed(request: SpeedRequest):
+    vehicle.speed = request.speed
+
+    return {
+        "speed": vehicle.speed
+    }

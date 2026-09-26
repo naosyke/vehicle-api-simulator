@@ -39,3 +39,17 @@ def test_get_position():
     assert response.status_code == 200
     assert "x" in response.json()
     assert "y" in response.json()
+
+def test_set_speed():
+    response = client.post(
+        "/vehicle/speed",
+        json={"speed": 30}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["speed"] == 30
+
+    response = client.get("/vehicle/speed")
+
+    assert response.status_code == 200
+    assert response.json()["speed"] == 30
