@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vehicle Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --control: #f0efec;
+    --control-hover: #e6e5e0;
+    --accent: #2a78d6;
+    --series-speed: #2a78d6;
+    --series-battery: #1baf7a;
+    --series-path: #4a3aa7;
+    --good: #0ca30c;
+    --warning: #fab219;
+    --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --control: #262624;
+      --control-hover: #31312e;
+      --accent: #3987e5;
+      --series-speed: #3987e5;
+      --series-battery: #199e70;
+      --series-path: #9085e9;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --control: #262624;
+    --control-hover: #31312e;
+    --accent: #3987e5;
+    --series-speed: #3987e5;
+    --series-battery: #199e70;
+    --series-path: #9085e9;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+  .muted { color: var(--text-muted); }
+  .secondary { color: var(--text-secondary); }
+  .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--critical); }
+  .conn.ok .dot { background: var(--good); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .tile-label { font-size: 12px; color: var(--text-secondary); }
+  .tile-value { font-size: 28px; font-weight: 600; margin-top: 2px; }
+  .tile-unit { font-size: 14px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+  .tile-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; min-height: 17px; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+  .stack { display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+  .chart { position: relative; }
+  .chart svg { display: block; width: 100%; height: 180px; overflow: visible; }
+  .path-chart svg { height: 320px; }
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    display: none;
+  }
+  .tooltip b { font-weight: 600; }
+  .axis-text { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  .control-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .control-row label { color: var(--text-secondary); font-size: 13px; }
+  .control-value { font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  button, select {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--control);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--control-hover); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+  .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .segmented button { border: 0; border-radius: 0; }
+  .segmented button[aria-pressed=true] { background: var(--accent); color: #fff; }
+  button[aria-pressed=true].toggle { background: var(--accent); color: #fff; }
+
+  .doors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .door { border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+  .door-name { font-size: 12px; color: var(--text-secondary); }
+  .door-state { display: flex; align-items: center; gap: 6px; margin: 4px 0 6px; font-weight: 600; font-size: 13px; }
+  .door-state svg { flex: none; }
+  .door .buttons button { padding: 3px 8px; font-size: 12px; }
+
+  .log { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; font-size: 12px; }
+  .log li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .log time { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .log .error { color: var(--critical); }
+  .log .type { font-weight: 600; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .charts { grid-template-columns: minmax(0, 1fr); }
+    .tile-value { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Vehicle Dashboard</h1>
+    <span id="conn" class="conn"><span class="dot"></span><span id="conn-label">Connecting…</span></span>
+    <span id="clock" class="muted"></span>
+  </header>
+
+  <section class="tiles" aria-label="Current values">
+    <div class="card">
+      <div class="tile-label">Speed</div>
+      <div class="tile-value"><span id="speed">–</span><span class="tile-unit">km/h</span></div>
+      <div class="tile-sub" id="speed-sub"></div>
+    </div>
+    <div class="card">
+      <div class="tile-label">Battery</div>
+      <div class="tile-value"><span id="battery">–</span><span class="tile-unit">%</span></div>
+      <div class="tile-sub" id="battery-sub"></div>
+    </div>
+    <div class="card">
+      <div class="tile-label">Heading / Steering</div>
+      <div class="tile-value"><span id="heading">–</span><span class="tile-unit">°</span></div>
+      <div class="tile-sub" id="steering-sub"></div>
+    </div>
+    <div class="card">
+      <div class="tile-label">Odometer</div>
+      <div class="tile-value"><span id="odometer">–</span><span class="tile-unit">km</span></div>
+      <div class="tile-sub" id="position-sub"></div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <div class="stack">
+      <div class="charts">
+        <div class="card chart" id="speed-chart">
+          <h2>Speed <span class="muted">(km/h, last 60 s)</span></h2>
+          <svg role="img" aria-label="Speed over the last 60 seconds"></svg>
+          <div class="tooltip"></div>
+        </div>
+        <div class="card chart" id="battery-chart">
+          <h2>Battery <span class="muted">(%, last 60 s)</span></h2>
+          <svg role="img" aria-label="Battery level over the last 60 seconds"></svg>
+          <div class="tooltip"></div>
+        </div>
+      </div>
+      <div class="card chart path-chart" id="path-chart">
+        <h2>Trajectory <span class="muted">(m, x = east, y = north)</span></h2>
+        <svg role="img" aria-label="Vehicle trajectory"></svg>
+        <div class="tooltip"></div>
+      </div>
+      <div class="card">
+        <h2>Events</h2>
+        <ul class="log" id="log" aria-live="polite"></ul>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="card">
+        <h2>Drive</h2>
+        <div class="control-row">
+          <label for="target-speed">Target speed</label>
+          <input id="target-speed" type="range" min="0" max="180" step="5" value="0">
+          <span class="control-value" id="target-speed-value">0 km/h</span>
+        </div>
+        <div class="control-row">
+          <label for="steering">Steering</label>
+          <input id="steering" type="range" min="-35" max="35" step="1" value="0">
+          <span class="control-value" id="steering-value">0°</span>
+        </div>
+        <div class="buttons">
+          <button id="stop">Stop</button>
+          <button id="center">Center steering</button>
+          <button id="reset">Reset simulation</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Doors</h2>
+        <div class="doors" id="doors"></div>
+      </div>
+
+      <div class="card">
+        <h2>Lights</h2>
+        <div class="buttons">
+          <div class="segmented" role="group" aria-label="Headlights" id="headlights">
+            <button data-mode="off">Off</button>
+            <button data-mode="low">Low</button>
+            <button data-mode="high">High</button>
+          </div>
+          <button class="toggle" id="hazard" aria-pressed="false">Hazard</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Energy</h2>
+        <div class="buttons">
+          <button class="toggle" id="charging" aria-pressed="false">Charging</button>
+          <button id="battery-low">Set battery 21 %</button>
+          <button id="battery-full">Set battery 100 %</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const HISTORY_SECONDS = 60;
+const DOORS = [
+  ["front_left", "Front left"],
+  ["front_right", "Front right"],
+  ["rear_left", "Rear left"],
+  ["rear_right", "Rear right"],
+];
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const history = [];     // {t, speed, battery}
+const trail = [];       // {x, y}
+let vehicle = null;
+
+// ---------- REST commands ----------
+
+async function command(path, body) {
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const detail = typeof data.detail === "string" ? data.detail : `HTTP ${response.status}`;
+      addLog("rejected", detail, true);
+    }
+  } catch (error) {
+    addLog("request failed", String(error), true);
+  }
+}
+
+const targetSpeed = document.getElementById("target-speed");
+const steering = document.getElementById("steering");
+targetSpeed.addEventListener("input", () => {
+  document.getElementById("target-speed-value").textContent = `${targetSpeed.value} km/h`;
+});
+targetSpeed.addEventListener("change", () => command("/vehicle/target-speed", {speed: Number(targetSpeed.value)}));
+steering.addEventListener("input", () => {
+  document.getElementById("steering-value").textContent = `${steering.value}°`;
+});
+steering.addEventListener("change", () => command("/vehicle/steering", {angle: Number(steering.value)}));
+
+document.getElementById("stop").onclick = () => command("/vehicle/target-speed", {speed: 0});
+document.getElementById("center").onclick = () => command("/vehicle/steering", {angle: 0});
+document.getElementById("reset").onclick = async () => {
+  await command("/simulation/reset");
+  history.length = 0;
+  trail.length = 0;
+};
+document.querySelectorAll("#headlights button").forEach((button) => {
+  button.onclick = () => command("/vehicle/lights", {headlights: button.dataset.mode});
+});
+document.getElementById("hazard").onclick = () =>
+  command("/vehicle/lights", {hazard: !(vehicle && vehicle.lights.hazard)});
+document.getElementById("charging").onclick = () =>
+  command("/vehicle/charging", {charging: !(vehicle && vehicle.charging)});
+document.getElementById("battery-low").onclick = () => command("/vehicle/battery", {level: 21});
+document.getElementById("battery-full").onclick = () => command("/vehicle/battery", {level: 100});
+
+const doorsEl = document.getElementById("doors");
+for (const [id, name] of DOORS) {
+  const el = document.createElement("div");
+  el.className = "door";
+  el.innerHTML = `
+    <div class="door-name">${name}</div>
+    <div class="door-state" data-state></div>
+    <div class="buttons">
+      <button data-lock></button>
+      <button data-open></button>
+    </div>`;
+  el.querySelector("[data-lock]").onclick = () =>
+    command(`/vehicle/doors/${id}`, {locked: !vehicle.doors[id].locked});
+  el.querySelector("[data-open]").onclick = () =>
+    command(`/vehicle/doors/${id}`, {open: !vehicle.doors[id].open});
+  el.dataset.door = id;
+  doorsEl.append(el);
+}
+
+// ---------- rendering: tiles and controls ----------
+
+const ICON_LOCKED = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+const ICON_UNLOCKED = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 7V5a2.5 2.5 0 0 1 4.9-.7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+const ICON_OPEN = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 15 14H1z" fill="var(--warning)"/><path d="M8 6v3.5M8 11.3v.2" stroke="#0b0b0b" stroke-width="1.6" stroke-linecap="round"/></svg>';
+
+function setText(id, text) {
+  document.getElementById(id).textContent = text;
+}
+
+function renderState(v) {
+  setText("speed", v.speed.toFixed(1));
+  setText("speed-sub", v.target_speed !== v.speed ? `target ${v.target_speed.toFixed(0)} km/h` : "");
+  setText("battery", v.battery.toFixed(2));
+  setText("battery-sub", v.charging ? "Charging" : v.battery < 20 ? "Low battery" : "");
+  setText("heading", v.heading.toFixed(0));
+  setText("steering-sub", `steering ${v.steering.toFixed(0)}°`);
+  setText("odometer", v.odometer.toFixed(3));
+  setText("position-sub", `x ${v.position.x.toFixed(1)} m, y ${v.position.y.toFixed(1)} m`);
+
+  // Keep sliders in sync unless the user is dragging them.
+  if (document.activeElement !== targetSpeed) {
+    targetSpeed.value = v.target_speed;
+    setText("target-speed-value", `${v.target_speed.toFixed(0)} km/h`);
+  }
+  if (document.activeElement !== steering) {
+    steering.value = v.steering;
+    setText("steering-value", `${v.steering.toFixed(0)}°`);
+  }
+
+  for (const el of doorsEl.children) {
+    const door = v.doors[el.dataset.door];
+    const state = el.querySelector("[data-state]");
+    if (door.open) {
+      state.innerHTML = `${ICON_OPEN}<span>Open</span>`;
+    } else if (door.locked) {
+      state.innerHTML = `${ICON_LOCKED}<span>Locked</span>`;
+    } else {
+      state.innerHTML = `${ICON_UNLOCKED}<span>Unlocked</span>`;
+    }
+    el.querySelector("[data-lock]").textContent = door.locked ? "Unlock" : "Lock";
+    el.querySelector("[data-open]").textContent = door.open ? "Close" : "Open";
+  }
+
+  document.querySelectorAll("#headlights button").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.mode === v.lights.headlights));
+  });
+  document.getElementById("hazard").setAttribute("aria-pressed", String(v.lights.hazard));
+  document.getElementById("charging").setAttribute("aria-pressed", String(v.charging));
+}
+
+// ---------- rendering: charts ----------
+
+function el(name, attrs, parent) {
+  const node = document.createElementNS(SVG_NS, name);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  if (parent) parent.append(node);
+  return node;
+}
+
+function niceTicks(min, max, count) {
+  const span = max - min || 1;
+  const step0 = span / count;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => span / s <= count);
+  const ticks = [];
+  const first = Math.floor(min / step + 1e-9);
+  const last = Math.ceil(max / step - 1e-9);
+  for (let i = first; i <= last; i++) ticks.push(+(i * step).toFixed(10));
+  return {ticks, min: ticks[0], max: ticks[ticks.length - 1], step};
+}
+
+// Position a tooltip next to a point given in SVG coordinates.
+function placeTooltip(container, svg, x, y) {
+  const tooltip = container.querySelector(".tooltip");
+  const svgBox = svg.getBoundingClientRect();
+  const boxOf = container.getBoundingClientRect();
+  const offsetX = svgBox.left - boxOf.left;
+  const offsetY = svgBox.top - boxOf.top;
+  const left = Math.min(x + 12, svgBox.width - tooltip.offsetWidth);
+  tooltip.style.left = `${offsetX + Math.max(0, left)}px`;
+  tooltip.style.top = `${offsetY + Math.max(0, y - 36)}px`;
+}
+
+function decimals(step) {
+  return step >= 1 ? 0 : Math.min(3, Math.ceil(-Math.log10(step)));
+}
+
+function drawTimeChart(container, key, color, unit, domain) {
+  const svg = container.querySelector("svg");
+  const width = svg.clientWidth;
+  const height = svg.clientHeight;
+  const margin = {top: 8, right: 8, bottom: 20, left: 44};
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.replaceChildren();
+  if (!history.length || width === 0) return;
+
+  const now = history[history.length - 1].t;
+  const points = history.filter((p) => p.t >= now - HISTORY_SECONDS);
+  const values = points.map((p) => p[key]);
+  const y = niceTicks(...domain(Math.min(...values), Math.max(...values)), 4);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+  const sx = (t) => margin.left + (1 - (now - t) / HISTORY_SECONDS) * plotW;
+  const sy = (v) => margin.top + (1 - (v - y.min) / (y.max - y.min)) * plotH;
+  const digits = decimals(y.step);
+
+  for (const tick of y.ticks) {
+    el("line", {x1: margin.left, x2: width - margin.right, y1: sy(tick), y2: sy(tick),
+      stroke: tick === y.min ? "var(--axis)" : "var(--grid)", "stroke-width": 1}, svg);
+    const label = el("text", {x: margin.left - 6, y: sy(tick) + 4, "text-anchor": "end", class: "axis-text"}, svg);
+    label.textContent = tick.toFixed(digits);
+  }
+  for (const seconds of [60, 45, 30, 15, 0]) {
+    const label = el("text", {x: sx(now - seconds), y: height - 4,
+      "text-anchor": seconds === 60 ? "start" : seconds === 0 ? "end" : "middle", class: "axis-text"}, svg);
+    label.textContent = seconds === 0 ? "now" : `-${seconds}s`;
+  }
+
+  const d = points.map((p, i) => `${i ? "L" : "M"}${sx(p.t).toFixed(1)},${sy(p[key]).toFixed(1)}`).join("");
+  el("path", {d, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+  const last = points[points.length - 1];
+  el("circle", {cx: sx(last.t), cy: sy(last[key]), r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2}, svg);
+
+  // Hover layer: crosshair + tooltip for the nearest sample.
+  const crosshair = el("line", {y1: margin.top, y2: height - margin.bottom, stroke: "var(--text-muted)",
+    "stroke-width": 1, "stroke-dasharray": "3 3", visibility: "hidden"}, svg);
+  const marker = el("circle", {r: 4, fill: color, stroke: "var(--surface)", "stroke-width": 2, visibility: "hidden"}, svg);
+  const hit = el("rect", {x: margin.left, y: margin.top, width: plotW, height: plotH, fill: "transparent"}, svg);
+  const tooltip = container.querySelector(".tooltip");
+
+  const show = (clientX) => {
+    const box = svg.getBoundingClientRect();
+    const x = clientX - box.left;
+    const t = now - (1 - (x - margin.left) / plotW) * HISTORY_SECONDS;
+    let nearest = points[0];
+    for (const p of points) if (Math.abs(p.t - t) < Math.abs(nearest.t - t)) nearest = p;
+    const px = sx(nearest.t);
+    const py = sy(nearest[key]);
+    crosshair.setAttribute("x1", px);
+    crosshair.setAttribute("x2", px);
+    crosshair.setAttribute("visibility", "visible");
+    marker.setAttribute("cx", px);
+    marker.setAttribute("cy", py);
+    marker.setAttribute("visibility", "visible");
+    tooltip.innerHTML = `<b>${nearest[key].toFixed(key === "battery" ? 3 : 1)} ${unit}</b> <span class="muted">${(now - nearest.t).toFixed(1)} s ago</span>`;
+    tooltip.style.display = "block";
+    placeTooltip(container, svg, px, py);
+  };
+  hit.addEventListener("pointermove", (e) => { container.hoverX = e.clientX; show(e.clientX); });
+  hit.addEventListener("pointerleave", () => { container.hoverX = null; tooltip.style.display = "none"; });
+  if (container.hoverX != null) show(container.hoverX);
+}
+
+function drawPath(container, v) {
+  const svg = container.querySelector("svg");
+  const width = svg.clientWidth;
+  const height = svg.clientHeight;
+  const margin = {top: 8, right: 8, bottom: 20, left: 44};
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.replaceChildren();
+  if (!v || width === 0) return;
+
+  const xs = trail.map((p) => p.x).concat([0, v.position.x]);
+  const ys = trail.map((p) => p.y).concat([0, v.position.y]);
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+
+  // Equal scale on both axes so turns keep their real shape.
+  let minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const span = Math.max(maxX - minX, maxY - minY, 20) * 1.15;
+  const scale = Math.min(plotW, plotH) / span;
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const viewW = plotW / scale, viewH = plotH / scale;
+  const xt = niceTicks(cx - viewW / 2, cx + viewW / 2, 6);
+  const yt = niceTicks(cy - viewH / 2, cy + viewH / 2, 5);
+  const sx = (x) => margin.left + plotW / 2 + (x - cx) * scale;
+  const sy = (y) => margin.top + plotH / 2 - (y - cy) * scale;
+
+  for (const tick of xt.ticks) {
+    const px = sx(tick);
+    if (px < margin.left || px > width - margin.right) continue;
+    el("line", {x1: px, x2: px, y1: margin.top, y2: height - margin.bottom, stroke: "var(--grid)"}, svg);
+    const label = el("text", {x: px, y: height - 4, "text-anchor": "middle", class: "axis-text"}, svg);
+    label.textContent = tick.toFixed(decimals(xt.step));
+  }
+  for (const tick of yt.ticks) {
+    const py = sy(tick);
+    if (py < margin.top || py > height - margin.bottom) continue;
+    el("line", {x1: margin.left, x2: width - margin.right, y1: py, y2: py, stroke: "var(--grid)"}, svg);
+    const label = el("text", {x: margin.left - 6, y: py + 4, "text-anchor": "end", class: "axis-text"}, svg);
+    label.textContent = tick.toFixed(decimals(yt.step));
+  }
+
+  // Origin marker.
+  el("circle", {cx: sx(0), cy: sy(0), r: 4, fill: "none", stroke: "var(--text-muted)", "stroke-width": 1.5}, svg);
+  const originLabel = el("text", {x: sx(0) + 7, y: sy(0) - 6, class: "axis-text"}, svg);
+  originLabel.textContent = "start";
+
+  if (trail.length > 1) {
+    const d = trail.map((p, i) => `${i ? "L" : "M"}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join("")
+      + `L${sx(v.position.x).toFixed(1)},${sy(v.position.y).toFixed(1)}`;
+    el("path", {d, fill: "none", stroke: "var(--series-path)", "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round"}, svg);
+  }
+
+  // Vehicle marker pointing along the heading (SVG y axis points down).
+  const angle = -v.heading;
+  const car = el("g", {transform: `translate(${sx(v.position.x)},${sy(v.position.y)}) rotate(${angle})`}, svg);
+  el("path", {d: "M10,0 L-7,-6 L-4,0 L-7,6 Z", fill: "var(--series-path)", stroke: "var(--surface)",
+    "stroke-width": 2, "stroke-linejoin": "round"}, car);
+
+  const tooltip = container.querySelector(".tooltip");
+  const hit = el("circle", {cx: sx(v.position.x), cy: sy(v.position.y), r: 14, fill: "transparent"}, svg);
+  hit.addEventListener("pointerenter", () => {
+    tooltip.innerHTML = `<b>x ${v.position.x.toFixed(1)} m, y ${v.position.y.toFixed(1)} m</b> <span class="muted">heading ${v.heading.toFixed(0)}°</span>`;
+    tooltip.style.display = "block";
+    placeTooltip(container, svg, sx(v.position.x) + 4, sy(v.position.y));
+  });
+  hit.addEventListener("pointerleave", () => { tooltip.style.display = "none"; });
+}
+
+function render() {
+  if (!vehicle) return;
+  renderState(vehicle);
+  drawTimeChart(document.getElementById("speed-chart"), "speed", "var(--series-speed)", "km/h",
+    (lo, hi) => [0, Math.max(hi, 10)]);
+  drawTimeChart(document.getElementById("battery-chart"), "battery", "var(--series-battery)", "%",
+    (lo, hi) => {
+      // Zoom in on small changes, but never show less than a 0.5 % span.
+      const pad = Math.max(0.5 - (hi - lo), 0) / 2;
+      return [Math.max(0, lo - pad), Math.min(100, hi + pad)];
+    });
+  drawPath(document.getElementById("path-chart"), vehicle);
+}
+
+// ---------- event log ----------
+
+const logEl = document.getElementById("log");
+
+function addLog(type, detail, isError) {
+  const item = document.createElement("li");
+  const time = new Date().toLocaleTimeString([], {hour12: false});
+  item.innerHTML = `<time>${time}</time><span><span class="type"></span> <span class="secondary"></span></span>`;
+  item.querySelector(".type").textContent = type;
+  item.querySelector(".secondary").textContent = detail;
+  if (isError) item.querySelector(".type").classList.add("error");
+  logEl.prepend(item);
+  while (logEl.children.length > 100) logEl.lastChild.remove();
+}
+
+function formatEventData(data) {
+  return Object.entries(data).map(([k, v]) => `${k}=${v}`).join(" ");
+}
+
+// ---------- WebSocket ----------
+
+function connect() {
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  const socket = new WebSocket(`${protocol}://${location.host}/ws`);
+  const conn = document.getElementById("conn");
+
+  socket.onopen = () => {
+    conn.classList.add("ok");
+    setText("conn-label", "Live");
+  };
+  socket.onclose = () => {
+    conn.classList.remove("ok");
+    setText("conn-label", "Disconnected, retrying…");
+    setTimeout(connect, 2000);
+  };
+  socket.onmessage = (message) => {
+    const data = JSON.parse(message.data);
+    if (data.kind === "event") {
+      if (data.type === "simulation_reset") {
+        history.length = 0;
+        trail.length = 0;
+      }
+      addLog(data.type, formatEventData(data.data), false);
+      return;
+    }
+
+    vehicle = data.vehicle;
+    const t = data.timestamp;
+    history.push({t, speed: vehicle.speed, battery: vehicle.battery});
+    while (history.length && history[0].t < t - HISTORY_SECONDS - 1) history.shift();
+
+    const last = trail[trail.length - 1];
+    const p = vehicle.position;
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) > 0.5) {
+      trail.push({x: p.x, y: p.y});
+      if (trail.length > 5000) trail.shift();
+    }
+    setText("clock", new Date(t * 1000).toLocaleTimeString([], {hour12: false}));
+    render();
+  };
+}
+
+window.addEventListener("resize", render);
+connect();
+</script>
+</body>
+</html>

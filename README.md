@@ -20,6 +20,7 @@ The project is intended for learning and experimentation with:
 ```mermaid
 flowchart LR
     browser["Web browser / API client"]
+    dashboard["Dashboard<br/>/dashboard"]
     subscriber["Subscriber<br/>tools/subscriber.py"]
 
     subgraph compose["Docker Compose"]
@@ -28,6 +29,7 @@ flowchart LR
     end
 
     browser -- "REST :8000" --> api
+    dashboard -- "REST commands<br/>WebSocket /ws" --> api
     api -- "MQTT publish<br/>telemetry / events / status" --> broker
     broker -- "MQTT subscribe :1883" --> subscriber
 ```
@@ -129,6 +131,35 @@ To build and run the production image without Compose:
 docker build -t vehicle-api-simulator .
 docker run --rm -p 8000:8000 vehicle-api-simulator
 ```
+
+## Dashboard
+
+Open the real-time dashboard in a browser:
+
+```text
+http://127.0.0.1:8000/dashboard
+```
+
+* Current speed, battery, heading and odometer
+* Speed and battery charts for the last 60 seconds (hover for values)
+* Trajectory plot with the vehicle's position and heading
+* Controls for target speed, steering, doors, lights and charging
+* Live event log, including commands rejected by the vehicle rules
+
+The dashboard is served by the API itself and receives data over a WebSocket,
+so it works with or without the MQTT broker.
+
+### WebSocket API
+
+`GET /ws` (WebSocket) streams JSON messages:
+
+```json
+{"kind": "state", "timestamp": 1790000000.0, "vehicle": {"speed": 40.0, "...": "..."}}
+{"kind": "event", "timestamp": 1790000000.1, "type": "door_opened", "data": {"door": "front_left"}}
+```
+
+State messages are sent every `WS_INTERVAL_SECONDS` (default `0.2`), and
+events are sent as soon as they happen.
 
 ## MQTT
 
@@ -272,6 +303,7 @@ Coordinates: `x` = east, `y` = north, heading 0° = east, counter-clockwise posi
 | `MQTT_PORT` | `1883` | MQTT broker port |
 | `VEHICLE_ID` | `sim-001` | Vehicle ID used in MQTT topics |
 | `TELEMETRY_INTERVAL_SECONDS` | `1.0` | Telemetry publish interval in seconds |
+| `WS_INTERVAL_SECONDS` | `0.2` | Dashboard WebSocket state interval in seconds |
 
 ## Run Tests
 
@@ -291,13 +323,18 @@ vehicle-api-simulator/
 │   ├── main.py            # REST API and background loops
 │   ├── models.py          # Request / response models
 │   ├── mqtt_publisher.py  # MQTT telemetry and events
-│   └── simulator.py       # Vehicle state, physics and events
+│   ├── simulator.py       # Vehicle state, physics and events
+│   ├── websocket_hub.py   # Event fan-out to WebSocket clients
+│   └── static/
+│       └── dashboard.html # Real-time dashboard
 │
 ├── tests/
 │   ├── conftest.py
+│   ├── test_dashboard.py
 │   ├── test_main.py
 │   ├── test_mqtt_publisher.py
-│   └── test_simulator.py
+│   ├── test_simulator.py
+│   └── test_websocket_hub.py
 │
 ├── tools/
 │   └── subscriber.py      # Sample MQTT subscriber
@@ -355,10 +392,10 @@ vehicle-api-simulator/
 
 ### Phase 6 - Dashboard
 
-* [ ] Real-time vehicle monitoring
-* [ ] Speed graph
-* [ ] Battery graph
-* [ ] Position visualization
+* [x] Real-time vehicle monitoring
+* [x] Speed graph
+* [x] Battery graph
+* [x] Position visualization
 
 ### Phase 7 - AI
 

@@ -2,8 +2,10 @@ import asyncio
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, RedirectResponse
 
 from app.models import (
     BatteryRequest,
@@ -22,9 +24,10 @@ from app.models import (
 )
 from app.mqtt_publisher import MqttPublisher
 from app.simulator import VehicleSimulator, VehicleStateError
+from app.websocket_hub import WebSocketHub
 
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # Set SIM_AUTO_UPDATE=0 to disable the background loop and drive the
 # simulation only through POST /simulation/step.
@@ -37,10 +40,25 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 VEHICLE_ID = os.getenv("VEHICLE_ID", "sim-001")
 TELEMETRY_INTERVAL_SECONDS = float(os.getenv("TELEMETRY_INTERVAL_SECONDS", "1.0"))
 
+# Interval of state updates pushed to dashboard WebSocket clients.
+WS_INTERVAL_SECONDS = float(os.getenv("WS_INTERVAL_SECONDS", "0.2"))
+
+STATIC_DIR = Path(__file__).parent / "static"
+
 
 simulator = VehicleSimulator()
 simulation_running = False
 mqtt_publisher = None
+
+websocket_hub = WebSocketHub()
+simulator.add_listener(
+    lambda event_type, data: websocket_hub.publish({
+        "kind": "event",
+        "timestamp": time.time(),
+        "type": event_type,
+        "data": data,
+    })
+)
 
 
 async def run_simulation_loop():
@@ -103,6 +121,45 @@ def root():
         "message": "Vehicle API Simulator",
         "version": VERSION,
     }
+
+
+@app.get("/dashboard", include_in_schema=False)
+def dashboard():
+    return FileResponse(STATIC_DIR / "dashboard.html")
+
+
+@app.websocket("/ws")
+async def vehicle_stream(websocket: WebSocket):
+    """Stream vehicle state every WS_INTERVAL_SECONDS and events as they happen.
+
+    Messages are JSON objects with "kind" set to "state" or "event".
+    """
+    await websocket.accept()
+    queue = websocket_hub.subscribe()
+    loop = asyncio.get_running_loop()
+
+    try:
+        next_state_at = loop.time()
+        while True:
+            timeout = next_state_at - loop.time()
+            if timeout <= 0:
+                await websocket.send_json({
+                    "kind": "state",
+                    "timestamp": time.time(),
+                    "vehicle": simulator.snapshot().model_dump(mode="json"),
+                })
+                next_state_at = loop.time() + WS_INTERVAL_SECONDS
+                continue
+
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout)
+            except asyncio.TimeoutError:
+                continue
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        websocket_hub.unsubscribe(queue)
 
 
 @app.get("/vehicle", response_model=Vehicle)
