@@ -17,21 +17,23 @@ The project is intended for learning and experimentation with:
 
 ## Architecture
 
-```text
-┌──────────────────────────────┐         ┌──────────────────────┐
-│  vehicle-api (container)     │         │ mosquitto (container)│
-│                              │  MQTT   │                      │
-│  Simulator ── MQTT publisher ├────────►│  MQTT broker :1883   │
-│  (physics,     telemetry /   │         └──────────┬───────────┘
-│   state rules) events        │                    │ MQTT
-│      ▲                       │                    ▼
-│      │ FastAPI :8000         │         ┌──────────────────────┐
-└──────┼───────────────────────┘         │ Subscriber           │
-       │ REST                            │ (tools/subscriber.py)│
-┌──────┴───────────────────────┐         └──────────────────────┘
-│ API client / Web browser     │
-└──────────────────────────────┘
+```mermaid
+flowchart LR
+    browser["Web browser / API client"]
+    subscriber["Subscriber<br/>tools/subscriber.py"]
+
+    subgraph compose["Docker Compose"]
+        api["vehicle-api<br/>FastAPI + simulator"]
+        broker["mosquitto<br/>MQTT broker"]
+    end
+
+    browser -- "REST :8000" --> api
+    api -- "MQTT publish<br/>telemetry / events / status" --> broker
+    broker -- "MQTT subscribe :1883" --> subscriber
 ```
+
+See [docs/architecture.md](docs/architecture.md) for the Docker setup,
+components, sequence diagrams and MQTT topics.
 
 ## Requirements
 
@@ -307,6 +309,8 @@ vehicle-api-simulator/
 ├── .gitignore
 ├── Dockerfile
 ├── docker-compose.yml
+├── docs/
+│   └── architecture.md
 ├── README.md
 └── requirements.txt
 ```
