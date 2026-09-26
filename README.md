@@ -22,6 +22,8 @@ flowchart LR
     browser["Web browser / API client"]
     dashboard["Dashboard<br/>/dashboard"]
     subscriber["Subscriber<br/>tools/subscriber.py"]
+    ai["AI assistant<br/>Claude Desktop / Claude Code"]
+    mcp["MCP server<br/>mcp_server/server.py"]
 
     subgraph compose["Docker Compose"]
         api["vehicle-api<br/>FastAPI + simulator"]
@@ -30,6 +32,8 @@ flowchart LR
 
     browser -- "REST :8000" --> api
     dashboard -- "REST commands<br/>WebSocket /ws" --> api
+    ai -- "MCP (stdio)" --> mcp
+    mcp -- "REST" --> api
     api -- "MQTT publish<br/>telemetry / events / status" --> broker
     broker -- "MQTT subscribe :1883" --> subscriber
 ```
@@ -161,6 +165,16 @@ so it works with or without the MQTT broker.
 State messages are sent every `WS_INTERVAL_SECONDS` (default `0.2`), and
 events are sent as soon as they happen.
 
+## AI Assistant (MCP)
+
+The [MCP server](mcp_server/README.md) exposes the vehicle as tools for AI
+assistants such as Claude Desktop and Claude Code, so you can ask things like
+"What's the battery level?" or "Unlock and open the front left door".
+Rejected commands come back with the reason, so the assistant can explain
+what to do instead.
+
+See [mcp_server/README.md](mcp_server/README.md) for setup.
+
 ## MQTT
 
 When `MQTT_HOST` is set (as in `docker-compose.yml`), the simulator publishes to an MQTT broker.
@@ -242,6 +256,7 @@ commands that are not allowed in the current vehicle state return `409`.
 | GET / POST | `/vehicle/lights` | `{"headlights": "off" \| "low" \| "high", "hazard": false}` |
 | GET / POST | `/vehicle/battery` | State of charge in percent `{"level": 80}` |
 | POST | `/vehicle/charging` | Start / stop charging `{"charging": true}` |
+| GET | `/events?limit=20` | Recent events, newest first (up to 200 are kept) |
 
 Example response of `GET /vehicle`:
 
@@ -348,6 +363,10 @@ vehicle-api-simulator/
 ├── docker-compose.yml
 ├── docs/
 │   └── architecture.md
+├── mcp_server/
+│   ├── server.py          # MCP server for AI assistants
+│   ├── tests/
+│   └── README.md
 ├── README.md
 └── requirements.txt
 ```
@@ -402,7 +421,7 @@ vehicle-api-simulator/
 * [ ] Driving data analysis
 * [ ] Abnormal behavior detection
 * [ ] AI vehicle assistant
-* [ ] AI agent integration
+* [x] AI agent integration (MCP server)
 
 ## Disclaimer
 

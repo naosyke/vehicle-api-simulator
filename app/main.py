@@ -1,10 +1,11 @@
 import asyncio
 import os
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, RedirectResponse
 
 from app.models import (
@@ -51,14 +52,24 @@ simulation_running = False
 mqtt_publisher = None
 
 websocket_hub = WebSocketHub()
-simulator.add_listener(
-    lambda event_type, data: websocket_hub.publish({
+
+# Recent simulator events, newest last, for GET /events.
+EVENT_HISTORY_SIZE = 200
+event_history = deque(maxlen=EVENT_HISTORY_SIZE)
+
+
+def on_simulator_event(event_type, data):
+    event = {
         "kind": "event",
         "timestamp": time.time(),
         "type": event_type,
         "data": data,
-    })
-)
+    }
+    event_history.append(event)
+    websocket_hub.publish(event)
+
+
+simulator.add_listener(on_simulator_event)
 
 
 async def run_simulation_loop():
@@ -279,6 +290,14 @@ def set_charging(request: ChargingRequest):
     except VehicleStateError as error:
         raise conflict(error)
     return get_battery()
+
+
+@app.get("/events")
+def get_events(limit: int = Query(20, ge=1, le=EVENT_HISTORY_SIZE)):
+    """Recent simulator events, newest first."""
+    events = list(event_history)[-limit:]
+    events.reverse()
+    return [{k: v for k, v in event.items() if k != "kind"} for event in events]
 
 
 @app.get("/simulation", response_model=SimulationStatus)
