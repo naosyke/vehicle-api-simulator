@@ -12,6 +12,7 @@ The host ports shown are the defaults (`API_PORT`, `MQTT_PORT`).
 ```mermaid
 flowchart LR
     browser["Web browser / API client<br/>curl, /docs"]
+    dashboard["Dashboard<br/>/dashboard"]
     subscriber["Subscriber<br/>tools/subscriber.py"]
 
     subgraph compose["Docker Compose network: vehicle-api-simulator_default"]
@@ -21,6 +22,7 @@ flowchart LR
     end
 
     browser -- "HTTP REST<br/>localhost:8000" --> api
+    dashboard -- "REST commands + WebSocket /ws<br/>localhost:8000" --> api
     api -- "MQTT publish<br/>mosquitto:1883" --> broker
     broker -- "MQTT subscribe<br/>localhost:1883" --> subscriber
 ```
@@ -74,7 +76,7 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    client["REST client"]
+    client["REST client / Dashboard"]
     broker["mosquitto"]
 
     subgraph process["vehicle-api process"]
@@ -90,6 +92,8 @@ flowchart LR
         sim["VehicleSimulator<br/>state · physics · rules<br/>(protected by a lock)"]
         publisher["MqttPublisher"]
         paho["paho-mqtt<br/>network thread"]
+        hub["WebSocketHub"]
+        ws["WebSocket /ws<br/>state every 0.2 s + events"]
     end
 
     client -- "HTTP" --> endpoints
@@ -100,6 +104,9 @@ flowchart LR
     telloop -- "publish_telemetry()" --> publisher
     publisher --> paho
     paho -- "MQTT" --> broker
+    sim -- "events<br/>(listener)" --> hub
+    hub --> ws
+    ws -- "WebSocket" --> client
 ```
 
 | Component | File | Responsibility |
@@ -108,6 +115,8 @@ flowchart LR
 | Background loops | `app/main.py` | Run the simulation and publish telemetry periodically |
 | VehicleSimulator | `app/simulator.py` | Vehicle state, physics, state rules, events |
 | MqttPublisher | `app/mqtt_publisher.py` | Send telemetry, events and online/offline status to MQTT |
+| WebSocketHub | `app/websocket_hub.py` | Deliver events to each WebSocket client's queue from any thread |
+| Dashboard | `app/static/dashboard.html` | Browser UI: tiles, charts, trajectory, controls, event log |
 | Models | `app/models.py` | Request and response schemas |
 
 Thread safety: endpoints run in a thread pool and the loops run on the event
@@ -187,6 +196,33 @@ sequenceDiagram
     Note over B,Sub: New subscribers get the last status immediately (retained)
 ```
 
+### Dashboard (WebSocket)
+
+The dashboard is served by the API and does not depend on the broker.
+Each WebSocket client gets its own queue, so a slow browser drops events
+instead of slowing down the simulator.
+
+```mermaid
+sequenceDiagram
+    participant D as Dashboard (browser)
+    participant A as FastAPI
+    participant H as WebSocketHub
+    participant S as VehicleSimulator
+
+    D->>A: GET /dashboard
+    D->>A: WebSocket /ws
+    A->>H: subscribe()
+    loop every 0.2 s
+        A->>S: snapshot()
+        A-->>D: {"kind": "state", "vehicle": ...}
+    end
+    D->>A: POST /vehicle/lights {"hazard": true}
+    A->>S: update_lights()
+    S->>H: lights_changed
+    H-->>A: event via the client's queue
+    A-->>D: {"kind": "event", "type": "lights_changed", ...}
+```
+
 ## 5. MQTT Topics
 
 | Topic | Direction | QoS | Retained | Payload |
@@ -213,3 +249,4 @@ all vehicles.
 | `SIM_AUTO_UPDATE` | `1` | container | `0` disables the simulation loop |
 | `SIM_TICK_SECONDS` | `0.1` | container | Simulation step interval |
 | `TELEMETRY_INTERVAL_SECONDS` | `1.0` | container | Telemetry publish interval |
+| `WS_INTERVAL_SECONDS` | `0.2` | container | Dashboard WebSocket state interval |
