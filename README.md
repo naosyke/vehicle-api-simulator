@@ -41,7 +41,7 @@ The project is intended for learning and experimentation with:
 
 ## Requirements
 
-* Python 3.10+
+* Python 3.9+
 * pip
 * Git
 
@@ -108,54 +108,81 @@ You can execute API requests directly from the browser.
 
 ## Available APIs
 
-### Get Vehicle Information
+All request and response bodies are JSON. Invalid values return `422`, and
+commands that are not allowed in the current vehicle state return `409`.
 
-```http
-GET /vehicle
-```
+### Vehicle State
 
-Example response:
+| Method | Path | Description |
+|---|---|---|
+| GET | `/vehicle` | Full vehicle state |
+| GET | `/vehicle/speed` | Current and target speed (km/h) |
+| POST | `/vehicle/speed` | Set the speed immediately `{"speed": 30}` |
+| POST | `/vehicle/target-speed` | Accelerate / decelerate toward a speed `{"speed": 60}` |
+| GET / POST | `/vehicle/steering` | Road wheel angle in degrees, -35 to 35, left positive `{"angle": 10}` |
+| GET / POST | `/vehicle/position` | Position in meters `{"x": 0, "y": 0}` |
+| GET | `/vehicle/doors` | All doors |
+| GET / POST | `/vehicle/doors/{door_id}` | `front_left`, `front_right`, `rear_left`, `rear_right` `{"open": true, "locked": false}` |
+| GET / POST | `/vehicle/lights` | `{"headlights": "off" \| "low" \| "high", "hazard": false}` |
+| GET / POST | `/vehicle/battery` | State of charge in percent `{"level": 80}` |
+| POST | `/vehicle/charging` | Start / stop charging `{"charging": true}` |
+
+Example response of `GET /vehicle`:
 
 ```json
 {
-  "speed": 0.0,
-  "battery": 100.0,
-  "position": {
-    "x": 0.0,
-    "y": 0.0
+  "speed": 32.7,
+  "target_speed": 60.0,
+  "battery": 99.9957,
+  "charging": false,
+  "position": {"x": 13.336, "y": 3.03},
+  "heading": 25.6,
+  "steering": 5.0,
+  "odometer": 0.0138,
+  "doors": {
+    "front_left": {"open": false, "locked": true},
+    "front_right": {"open": false, "locked": true},
+    "rear_left": {"open": false, "locked": true},
+    "rear_right": {"open": false, "locked": true}
   },
-  "steering": 0.0
+  "lights": {"headlights": "off", "hazard": false}
 }
 ```
 
-### Get Vehicle Speed
+### Vehicle Rules
 
-```http
-GET /vehicle/speed
-```
+* A locked door cannot be opened (unlock it in the same or an earlier request).
+* Doors cannot be opened while the vehicle is moving.
+* The vehicle cannot drive with a door open, while charging, or with an empty battery.
+* Charging is not allowed while moving and stops automatically at 100 %.
+* When the battery reaches 0 %, the vehicle decelerates to a stop.
 
-Example response:
+### Simulation
 
-```json
-{
-  "speed": 0.0
-}
-```
+| Method | Path | Description |
+|---|---|---|
+| GET | `/simulation` | Whether the periodic update loop is running, tick interval, elapsed time |
+| POST | `/simulation/step` | Advance the simulation manually `{"seconds": 1.0}` |
+| POST | `/simulation/reset` | Reset the vehicle to its initial state |
 
-### Get Vehicle Position
+The vehicle moves with a kinematic bicycle model:
 
-```http
-GET /vehicle/position
-```
+| Parameter | Value |
+|---|---|
+| Wheelbase | 2.7 m |
+| Acceleration / deceleration | 3.0 / 6.0 m/s² |
+| Max speed | 180 km/h |
+| Battery | 60 kWh, 0.15 kWh/km, 0.5 kW idle |
+| Charging power | 50 kW |
 
-Example response:
+Coordinates: `x` = east, `y` = north, heading 0° = east, counter-clockwise positive.
 
-```json
-{
-  "x": 0.0,
-  "y": 0.0
-}
-```
+### Configuration
+
+| Environment variable | Default | Description |
+|---|---|---|
+| `SIM_AUTO_UPDATE` | `1` | Set to `0` to disable the periodic update loop and use `/simulation/step` only |
+| `SIM_TICK_SECONDS` | `0.1` | Periodic update interval in seconds |
 
 ## Run Tests
 
@@ -172,10 +199,14 @@ vehicle-api-simulator/
 │
 ├── app/
 │   ├── __init__.py
-│   └── main.py
+│   ├── main.py        # REST API and periodic update loop
+│   ├── models.py      # Request / response models
+│   └── simulator.py   # Vehicle state and physics
 │
 ├── tests/
-│   └── test_main.py
+│   ├── conftest.py
+│   ├── test_main.py
+│   └── test_simulator.py
 │
 ├── .gitignore
 ├── README.md
@@ -193,19 +224,19 @@ vehicle-api-simulator/
 
 ### Phase 2 - Vehicle Control
 
-* [ ] Change vehicle speed
-* [ ] Change steering
-* [ ] Change vehicle position
-* [ ] Door state
-* [ ] Lights
-* [ ] Battery state
+* [x] Change vehicle speed
+* [x] Change steering
+* [x] Change vehicle position
+* [x] Door state
+* [x] Lights
+* [x] Battery state
 
 ### Phase 3 - Vehicle Simulation
 
-* [ ] Automatic vehicle movement
-* [ ] Acceleration / deceleration
-* [ ] Vehicle physics
-* [ ] Periodic state updates
+* [x] Automatic vehicle movement
+* [x] Acceleration / deceleration
+* [x] Vehicle physics
+* [x] Periodic state updates
 
 ### Phase 4 - Docker
 
